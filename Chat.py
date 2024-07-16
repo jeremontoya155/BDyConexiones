@@ -1,5 +1,5 @@
 import cv2
-from tkinter import Tk, filedialog, Button, Label, Entry, Toplevel, StringVar, OptionMenu, Spinbox
+from tkinter import Tk, filedialog, Button, Label, Toplevel, StringVar, OptionMenu
 from tkinter import messagebox
 from tkinter import ttk
 from tkcalendar import Calendar
@@ -12,7 +12,7 @@ import threading
 
 # Diccionario de farmacias y sus códigos IMED
 farmacias = {
-    "Sanchez Antoniolli": "99029498005",
+    "Sanchez Antoniolli 1": "99029498005",
     "Sanchez Antoniolli II": "99029499003",
     "Sanchez Antoniolli III": "99029404003",
     "Sanchez Antoniolli IV": "99033358005",
@@ -29,10 +29,10 @@ farmacias = {
     "Sanchez Antoniolli XVI": "99036568006",
     "Sanchez Antoniolli XVII": "99036629006",
     "SANCHEZ ANTONIOLLI XVIII": "99036998005",
-    "Sanchez Antoniolli XIX": "99037744002",
+    "Sanchez Antoniolli XIX": "99037744002",    
     "Sanchez Antoniolli XX": "99033579006",
     "Sanchez Antoniolli XXI": "99037766005",
-    "Sanchez Antoniolli 23": "99038657005",
+    "Sanchez Antoniolli 23": "99038657005", 
     "SANCHEZ ANTONIOLLI 24": "99038046001",
     "Sanchez Antoniolli 25": "99038698009",
     "Sanchez Antoniolli 26": "99038968006",
@@ -40,12 +40,29 @@ farmacias = {
 }
 
 def select_images_from_sucursal():
-    global file_paths
+    global file_paths, start_date_entry, end_date_entry
     selected_code = farmacias[selected_farmacia.get()]
     escritorio = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
     sucursal_path = os.path.join(escritorio, 'sucursales', selected_code)
     
-    file_paths = [os.path.join(sucursal_path, f) for f in os.listdir(sucursal_path) if f.endswith('.tif') and 'pami' in f.lower()]
+    # Obtener el rango de fechas seleccionadas por el usuario
+    start_date_str = start_date_entry.get_date()
+    end_date_str = end_date_entry.get_date()
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+    except ValueError:
+        messagebox.showerror("Error", "Formato de fecha incorrecto.")
+        return
+
+    file_paths = []
+    for f in os.listdir(sucursal_path):
+        if f.endswith('.tif') and 'pami' in f.lower():
+            file_path = os.path.join(sucursal_path, f)
+            file_creation_time = datetime.fromtimestamp(os.path.getctime(file_path))
+            if start_date <= file_creation_time <= end_date:
+                file_paths.append(file_path)
+
     if file_paths:
         file_count.set(f"{len(file_paths)} archivos seleccionados de la sucursal {selected_farmacia.get()}.")
     else:
@@ -287,6 +304,8 @@ def save_failed_images(failed_images, directory):
 
 def create_gui():
     global root, file_count, progress_bar, file_paths, save_directory, manual_save_directory, save_directory_label, selected_farmacia
+    global start_date_entry, end_date_entry
+
     file_paths = []
     save_directory = ""
     manual_save_directory = ""
@@ -310,24 +329,24 @@ def create_gui():
     selected_farmacia.set("Seleccionar Farmacia")
 
     def open_date_picker():
+        global start_date_entry, end_date_entry
+
         def set_date():
             start_date_str = start_date_entry.get_date()
             end_date_str = end_date_entry.get_date()
-            start_time_str = f"{start_date_str} {start_hour_spinbox.get()}:{start_minute_spinbox.get()}:00"
-            end_time_str = f"{end_date_str} {end_hour_spinbox.get()}:{end_minute_spinbox.get()}:00"
             try:
-                start = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
-                end = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S')
+                start = datetime.strptime(start_date_str, '%Y-%m-%d')
+                end = datetime.strptime(end_date_str, '%Y-%m-%d')
                 if start > end:
                     messagebox.showerror("Error", "La fecha de inicio debe ser anterior a la fecha de fin.")
                 else:
                     date_window.destroy()
             except ValueError:
-                messagebox.showerror("Error", "Formato de fecha/hora incorrecto.")
+                messagebox.showerror("Error", "Formato de fecha incorrecto.")
 
         date_window = Toplevel(root)
         date_window.title("Seleccionar Rango de Fechas")
-        date_window.geometry("800x600")
+        date_window.geometry("400x300")
         date_window.resizable(True, True)
 
         start_label = ttk.Label(date_window, text="Fecha de Inicio:")
@@ -335,30 +354,10 @@ def create_gui():
         start_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
         start_date_entry.pack(pady=5)
 
-        start_hour_label = ttk.Label(date_window, text="Hora de Inicio (HH):")
-        start_hour_label.pack(pady=5)
-        start_hour_spinbox = Spinbox(date_window, from_=0, to=23, width=5)
-        start_hour_spinbox.pack(pady=5)
-
-        start_minute_label = ttk.Label(date_window, text="Minuto de Inicio (MM):")
-        start_minute_label.pack(pady=5)
-        start_minute_spinbox = Spinbox(date_window, from_=0, to=59, width=5)
-        start_minute_spinbox.pack(pady=5)
-
         end_label = ttk.Label(date_window, text="Fecha de Fin:")
         end_label.pack(pady=5)
         end_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
         end_date_entry.pack(pady=5)
-
-        end_hour_label = ttk.Label(date_window, text="Hora de Fin (HH):")
-        end_hour_label.pack(pady=5)
-        end_hour_spinbox = Spinbox(date_window, from_=0, to=23, width=5)
-        end_hour_spinbox.pack(pady=5)
-
-        end_minute_label = ttk.Label(date_window, text="Minuto de Fin (MM):")
-        end_minute_label.pack(pady=5)
-        end_minute_spinbox = Spinbox(date_window, from_=0, to=59, width=5)
-        end_minute_spinbox.pack(pady=5)
 
         set_date_button = ttk.Button(date_window, text="Establecer Fecha", command=set_date)
         set_date_button.pack(pady=10)
@@ -406,3 +405,6 @@ def create_gui():
     root.mainloop()
 
 create_gui()
+
+
+
