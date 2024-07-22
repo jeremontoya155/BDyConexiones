@@ -1,5 +1,5 @@
 import cv2
-from tkinter import Tk, filedialog, Button, Label, Toplevel, StringVar, OptionMenu
+from tkinter import Tk, filedialog, Button, Label, Toplevel, StringVar, OptionMenu, Entry
 from tkinter import messagebox
 from tkinter import ttk
 from tkcalendar import Calendar
@@ -42,7 +42,9 @@ farmacias = {
     "Sanchez Carestia": "99036479006"
 }
 
-# Función para extraer el último número o número romano de una cadena
+ruta_inicial = r"\\10.0.0.123\recetas"
+save_directory = ""
+
 def extract_last_number_or_roman(text):
     match = re.search(r'(\d+|[IVXLCDM]+)$', text, re.IGNORECASE)
     if match:
@@ -68,9 +70,8 @@ def get_sucursal_number(sucursal_name):
     return extract_last_number_or_roman(sucursal_name)
 
 def select_images_from_sucursal():
-    global file_paths, start_date_entry, end_date_entry
+    global file_paths
     selected_code = farmacias[selected_farmacia.get()]
-    ruta_inicial = r"\\10.0.0.123\recetas"
     sucursal_path = os.path.join(ruta_inicial, selected_code)
 
     # Obtener el rango de fechas seleccionadas por el usuario
@@ -96,7 +97,6 @@ def select_images_from_sucursal():
     else:
         file_count.set("No se encontraron archivos que cumplan con los criterios en la sucursal seleccionada.")
 
-
 def select_save_directory():
     global manual_save_directory
     manual_save_directory = filedialog.askdirectory()
@@ -104,6 +104,79 @@ def select_save_directory():
         save_directory_label.set(f"Directorio de guardado manual seleccionado: {manual_save_directory}")
     else:
         save_directory_label.set("No se seleccionó un directorio de guardado.")
+
+def authenticate():
+    auth_window = Toplevel(root)
+    auth_window.title("Autenticación")
+    auth_window.geometry("300x150")
+
+    Label(auth_window, text="Usuario:").pack(pady=5)
+    user_entry = Entry(auth_window)
+    user_entry.pack(pady=5)
+
+    Label(auth_window, text="Contraseña:").pack(pady=5)
+    pass_entry = Entry(auth_window, show='*')
+    pass_entry.pack(pady=5)
+
+    def check_credentials():
+        user = user_entry.get()
+        password = pass_entry.get()
+        if user == "farma" and password == "farmaciasanchez02":
+            auth_window.destroy()
+            change_paths()
+        else:
+            messagebox.showerror("Error", "Credenciales incorrectas")
+
+    Button(auth_window, text="Aceptar", command=check_credentials).pack(pady=10)
+
+def change_paths():
+    global ruta_inicial, save_directory
+    new_read_path = filedialog.askdirectory(title="Seleccionar nueva ruta de lectura")
+    new_save_path = filedialog.askdirectory(title="Seleccionar nueva ruta de guardado")
+    if new_read_path and new_save_path:
+        ruta_inicial = new_read_path
+        save_directory = new_save_path
+        messagebox.showinfo("Éxito", "Rutas actualizadas correctamente")
+
+def open_date_picker():
+    global start_date_entry, end_date_entry
+
+    def set_date():
+        start_date_str = start_date_entry.get_date()
+        end_date_str = end_date_entry.get_date()
+        try:
+            start = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end = datetime.strptime(end_date_str, '%Y-%m-%d')
+            if start > end:
+                messagebox.showerror("Error", "La fecha de inicio debe ser anterior a la fecha de fin.")
+            else:
+                date_window.destroy()
+        except ValueError:
+            messagebox.showerror("Error", "Formato de fecha incorrecto.")
+
+    date_window = Toplevel(root)
+    date_window.title("Seleccionar Rango de Fechas")
+    date_window.geometry("400x300")
+    date_window.resizable(True, True)
+
+    start_label = ttk.Label(date_window, text="Fecha de Inicio:")
+    start_label.pack(pady=5)
+    start_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
+    start_date_entry.pack(pady=5)
+
+    end_label = ttk.Label(date_window, text="Fecha de Fin:")
+    end_label.pack(pady=5)
+    end_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
+    end_date_entry.pack(pady=5)
+
+    set_date_button = ttk.Button(date_window, text="Establecer Fecha", command=set_date)
+    set_date_button.pack(pady=10)
+
+    fullscreen_button = ttk.Button(date_window, text="Pantalla Completa", command=lambda: date_window.attributes("-fullscreen", True))
+    fullscreen_button.pack(pady=10)
+
+    exit_fullscreen_button = ttk.Button(date_window, text="Salir de Pantalla Completa", command=lambda: date_window.attributes("-fullscreen", False))
+    exit_fullscreen_button.pack(pady=10)
 
 def process_images():
     if not file_paths:
@@ -178,7 +251,7 @@ def process_failed_image(image_path):
                     barcodes += decode(rotated_enhanced_image, symbols=[ZBarSymbol.CODE128, ZBarSymbol.CODE39, ZBarSymbol.EAN13, ZBarSymbol.EAN8, ZBarSymbol.PDF417])
                     for barcode_obj in barcodes:
                         barcode_data = barcode_obj.data.decode('utf-8')
-                        if barcode_data.startswith('8') and len(barcode_data) == 13:
+                        if (barcode_data.startswith('8') or barcode_data.startswith('0')) and len(barcode_data) == 13:
                             barcode_type = barcode_obj.type
                             print(f'Código de barras: {barcode_data}, Tipo: {barcode_type}')
                             count += 1
@@ -192,7 +265,7 @@ def process_failed_image(image_path):
             if success:
                 break
         if not success:
-            kernel = np.ones((5,5),np.uint8)
+            kernel = np.ones((5, 5), np.uint8)
             morph_image = cv2.morphologyEx(cropped_image, cv2.MORPH_CLOSE, kernel)
             for attempt in range(1, 4):
                 enhanced_image = enhance_image(morph_image, attempt)
@@ -390,7 +463,7 @@ def create_gui():
 
     root = Tk()
     root.title("Lector de Códigos de Barras")
-    root.geometry("800x800")
+    root.geometry("800x400")
     root.resizable(True, True)
 
     style = ttk.Style(root)
@@ -406,59 +479,6 @@ def create_gui():
     selected_farmacia = StringVar(root)
     selected_farmacia.set("Seleccionar Farmacia")
 
-    def open_date_picker():
-        global start_date_entry, end_date_entry
-
-        def set_date():
-            start_date_str = start_date_entry.get_date()
-            end_date_str = end_date_entry.get_date()
-            try:
-                start = datetime.strptime(start_date_str, '%Y-%m-%d')
-                end = datetime.strptime(end_date_str, '%Y-%m-%d')
-                if start > end:
-                    messagebox.showerror("Error", "La fecha de inicio debe ser anterior a la fecha de fin.")
-                else:
-                    date_window.destroy()
-            except ValueError:
-                messagebox.showerror("Error", "Formato de fecha incorrecto.")
-
-        date_window = Toplevel(root)
-        date_window.title("Seleccionar Rango de Fechas")
-        date_window.geometry("400x300")
-        date_window.resizable(True, True)
-
-        start_label = ttk.Label(date_window, text="Fecha de Inicio:")
-        start_label.pack(pady=5)
-        start_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
-        start_date_entry.pack(pady=5)
-
-        end_label = ttk.Label(date_window, text="Fecha de Fin:")
-        end_label.pack(pady=5)
-        end_date_entry = Calendar(date_window, selectmode='day', date_pattern='yyyy-mm-dd')
-        end_date_entry.pack(pady=5)
-
-        set_date_button = ttk.Button(date_window, text="Establecer Fecha", command=set_date)
-        set_date_button.pack(pady=10)
-
-        fullscreen_button = ttk.Button(date_window, text="Pantalla Completa", command=lambda: date_window.attributes("-fullscreen", True))
-        fullscreen_button.pack(pady=10)
-
-        exit_fullscreen_button = ttk.Button(date_window, text="Salir de Pantalla Completa", command=lambda: date_window.attributes("-fullscreen", False))
-        exit_fullscreen_button.pack(pady=10)
-
-    def update_save_directory(*args):
-        global save_directory
-        selected_code = farmacias[selected_farmacia.get()]
-        escritorio = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
-        resultados_path = os.path.join(escritorio, 'resultados')
-        save_directory = os.path.join(resultados_path, selected_farmacia.get())
-        save_directory_label.set(f"Directorio de guardado: {save_directory}")
-
-    selected_farmacia.trace("w", update_save_directory)
-
-    select_button = ttk.Button(root, text="Seleccionar Archivos desde Sucursal", command=select_images_from_sucursal)
-    select_button.pack(pady=10)
-
     date_button = ttk.Button(root, text="Seleccionar Rango de Fechas", command=open_date_picker)
     date_button.pack(pady=10)
 
@@ -467,6 +487,9 @@ def create_gui():
 
     save_directory_button = ttk.Button(root, text="Seleccionar Directorio de Guardado Manual", command=select_save_directory)
     save_directory_button.pack(pady=10)
+
+    auth_button = ttk.Button(root, text="Cambiar Rutas (Requiere Autenticación)", command=authenticate)
+    auth_button.pack(pady=10)
 
     save_directory_label_widget = ttk.Label(root, textvariable=save_directory_label)
     save_directory_label_widget.pack(pady=10)
